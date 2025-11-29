@@ -108,6 +108,27 @@ Just see what posts will be scraped without actually scraping:
 uv run python scrape/list_posts.py
 ```
 
+### 5. Extract Named Entities
+
+Extract named entities (people, organizations, locations, etc.) from stories:
+
+```bash
+# First, install spaCy model (one-time setup)
+python -m spacy download en_core_web_sm
+
+# Then run extraction
+uv run python entities/extract_entities.py
+```
+
+This will:
+- Extract entities from `item_what_happened`, `item_why_it_matters`, and `title` fields
+- Filter entities (minimum 3 stories, proper capitalization, etc.)
+- Generate `data/entities.json` mapping entity names to story IDs
+- Generate `data/entities_sample.csv` with top 200 entities for review
+- Display statistics about extracted entities
+
+**Output:** `data/entities.json`, `data/entities_sample.csv`
+
 ## Workflow
 
 Typical workflow:
@@ -132,6 +153,15 @@ Typical workflow:
    uv run python scrape/enrich.py --all
    ```
 
+5. **Extract named entities:**
+   ```bash
+   # One-time: Download spaCy model
+   python -m spacy download en_core_web_sm
+   
+   # Extract entities
+   uv run python entities/extract_entities.py
+   ```
+
 ## File Structure
 
 ```
@@ -143,10 +173,16 @@ trump-tyranny-tracker/
 │   ├── import_to_duckdb.py    # Imports CSV to DuckDB
 │   ├── enrich.py              # Enriches stories with article content
 │   └── list_posts.py          # Lists posts without scraping
+├── entities/
+│   └── extract_entities.py    # Extracts named entities from stories
+├── sql/
+│   └── queries.sql            # SQL queries for data exploration
 ├── scrape_all.py              # Main scraper script
 └── data/
     ├── scraped_posts.csv      # Scraped data (CSV)
-    └── stories.duckdb         # Database with all data
+    ├── stories.duckdb         # Database with all data
+    ├── entities.json          # Entity-to-story mapping
+    └── entities_sample.csv    # Top 200 entities for review
 ```
 
 ## Dependencies
@@ -159,6 +195,7 @@ trump-tyranny-tracker/
 - `pandas` - Data manipulation
 - `playwright` - Browser automation
 - `requests` - HTTP requests
+- `spacy` - Named entity recognition (requires `en_core_web_sm` model)
 
 ## Notes
 

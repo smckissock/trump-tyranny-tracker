@@ -26,6 +26,16 @@ class PostScraper:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
             page.goto(url, wait_until='networkidle')
+            
+            # Wait for article content to load
+            try:
+                page.wait_for_selector('article, .post-content, .body-markup, h3', timeout=10000)
+            except:
+                logger.warning(f"Timeout waiting for content selector on {url}")
+            
+            # Additional wait for dynamic content
+            page.wait_for_timeout(2000)
+            
             html = page.content()
             browser.close()
             
@@ -82,21 +92,34 @@ class PostScraper:
         author = ""
         date = ""
         
-        # Look for author - common patterns in Substack
-        author_selectors = [
-            '.author-name',
-            '[class*="author"]',
-            '.byline',
-            '.post-meta',
-        ]
+        # Look for author in meta tag (most reliable for Substack)
+        author_meta = soup.select_one('meta[name="author"]')
+        if author_meta and author_meta.get('content'):
+            author = author_meta.get('content')
         
-        for selector in author_selectors:
-            author_elem = soup.select_one(selector)
-            if author_elem:
-                author_text = author_elem.get_text(strip=True)
-                if author_text and not author_text.startswith('Nov') and not author_text.startswith('2025'):
-                    author = author_text
-                    break
+        # Fallback: Substack profile links
+        if not author:
+            author_link = soup.select_one('a[href*="substack.com/@"]')
+            if author_link:
+                author = author_link.get_text(strip=True)
+        
+        # Fallback to common patterns
+        if not author:
+            author_selectors = [
+                '.author-name',
+                '[class*="author"]',
+                '.byline',
+                '.post-meta',
+                '.profile-hover-card-target a',
+            ]
+            
+            for selector in author_selectors:
+                author_elem = soup.select_one(selector)
+                if author_elem:
+                    author_text = author_elem.get_text(strip=True)
+                    if author_text and not author_text.startswith('Nov') and not author_text.startswith('2025'):
+                        author = author_text
+                        break
         
         # Look for date - often near author or in meta
         date_patterns = [
@@ -276,15 +299,42 @@ class PostScraper:
                     # Check if it has the header-anchor-post class
                     classes = elem.get('class', [])
                     if 'header-anchor-post' in classes or not classes:
-                        title_text = text
+                        # Extract item_section_type from <strong> tag if present
+                        item_section_type = section_name  # Default to section_name
+                        item_section = ""  # Will be h3 text excluding strong
+                        
+                        strong_tag = elem.find('strong')
+                        if strong_tag:
+                            # Extract text from strong tag as item_section_type
+                            item_section_type = strong_tag.get_text(strip=True)
+                            # Extract h3 text excluding the strong tag as item_section
+                            # Clone the element and remove strong tag to get remaining text
+                            elem_copy = BeautifulSoup(str(elem), 'lxml').find('h3')
+                            if elem_copy:
+                                strong_in_copy = elem_copy.find('strong')
+                                if strong_in_copy:
+                                    strong_in_copy.decompose()  # Remove strong tag
+                                item_section = elem_copy.get_text(strip=True)
+                        else:
+                            # No strong tag, use full text as item_section
+                            item_section = text
+                        
+                        title_text = item_section if item_section else text
                         # Item titles are usually longer than 20 chars and not section headers
                         is_item_title = (len(title_text) > 20 and 
                                        not re.search(r'[🔥🛡️⚖️👊🏼📊🔎💡🚨]', title_text) and
                                        not ('In' in title_text and 'News' in title_text))
             
             if is_item_title and title_text:
+                # Ensure variables are defined
+                if 'item_section_type' not in locals():
+                    item_section_type = section_name
+                if 'item_section' not in locals():
+                    item_section = ''
+                
                 item = {
-                    'item_section': section_name,
+                    'item_section_type': item_section_type,
+                    'item_section': item_section,
                     'item_what_happened': '',
                     'item_why_it_matters': '',
                     'source_name': '',
@@ -371,7 +421,7 @@ class PostScraper:
                         item['item_why_it_matters'] = why_matters
                         found_why_matters = True
             
-            # Look for source in <pre><code> blocks
+            # Look for source in <pre><code> blocks (newer format)
             elif hasattr(elem, 'name') and elem.name == 'pre':
                 code = elem.find('code')
                 if code:
@@ -391,6 +441,17 @@ class PostScraper:
                             source_text = re.sub(r'https?://[^\s<>"]+', '', source_text).strip()
                         if source_text:
                             item['source_name'] = source_text.strip()
+            
+            # Look for source in <p><strong>Source:</strong>...<a>...</a></p> (older format)
+            elif hasattr(elem, 'name') and elem.name == 'p' and 'Source' in text and not item.get('source_url'):
+                # Look for link inside the paragraph
+                link = elem.find('a', href=True)
+                if link:
+                    href = link.get('href', '')
+                    # Only use external links (not substack internal links)
+                    if href and not href.startswith('#') and 'substack.com' not in href:
+                        item['source_url'] = href
+                        item['source_name'] = link.get_text(strip=True)
             
             # Also check for source in code tags directly
             elif hasattr(elem, 'name') and elem.name == 'code':
@@ -505,13 +566,33 @@ class PostScraper:
                 current_section = title_text
                 continue
             
+            # Extract item_section_type from <strong> tag if present
+            item_section_type = current_section  # Default to current_section
+            item_section = ""  # Will be h3 text excluding strong
+            
+            strong_tag = h3.find('strong')
+            if strong_tag:
+                # Extract text from strong tag as item_section_type
+                item_section_type = strong_tag.get_text(strip=True)
+                # Extract h3 text excluding the strong tag as item_section
+                h3_copy = BeautifulSoup(str(h3), 'lxml').find('h3')
+                if h3_copy:
+                    strong_in_copy = h3_copy.find('strong')
+                    if strong_in_copy:
+                        strong_in_copy.decompose()  # Remove strong tag
+                    item_section = h3_copy.get_text(strip=True)
+            else:
+                # No strong tag, use full text as item_section
+                item_section = title_text
+            
             # Skip if too short (likely not an item title)
-            if len(title_text) < 20:
+            if len(item_section) < 20 and len(title_text) < 20:
                 continue
             
             # Create new item
             item = {
-                'item_section': current_section,
+                'item_section_type': item_section_type,
+                'item_section': item_section,
                 'item_what_happened': '',
                 'item_why_it_matters': '',
                 'source_name': '',
@@ -567,14 +648,25 @@ class PostScraper:
                                 item['item_why_it_matters'] = why_matters
                                 found_why_matters = True
                 
-                # Extract Source
-                if hasattr(current, 'name') and current.name == 'pre':
+                # Extract Source (newer format: <pre><code>)
+                if hasattr(current, 'name') and current.name == 'pre' and not item.get('source_url'):
                     code = current.find('code')
                     if code:
                         link = code.find('a', href=True)
                         if link:
                             item['source_url'] = link.get('href', '')
                             item['source_name'] = link.get_text(strip=True)
+                
+                # Extract Source (older format: <p><strong>Source:</strong>...<a>)
+                if hasattr(current, 'name') and current.name == 'p' and not item.get('source_url'):
+                    text = current.get_text(strip=True) if hasattr(current, 'get_text') else ''
+                    if 'Source' in text:
+                        link = current.find('a', href=True)
+                        if link:
+                            href = link.get('href', '')
+                            if href and not href.startswith('#') and 'substack.com' not in href:
+                                item['source_url'] = href
+                                item['source_name'] = link.get_text(strip=True)
                 
                 # Move to next sibling
                 current = getattr(current, 'next_sibling', None)
