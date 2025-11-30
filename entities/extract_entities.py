@@ -9,7 +9,6 @@ Usage:
 
 import sys
 import io
-import time
 from pathlib import Path
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -25,6 +24,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 import duckdb
 import pandas as pd
+from tqdm import tqdm
 
 # Try to import spacy
 try:
@@ -41,10 +41,14 @@ DEFAULT_DB = DATA_DIR / "stories.duckdb"
 # Field weights for score calculation
 FIELD_WEIGHTS = {
     'item_what_happened': 4.0,
+    'item_section': 3.0,       # Curated item headline
     'item_why_it_matters': 3.0,
     'title': 2.0,
-    'body': 1.0
+    'body': 2.0
 }
+
+# Max appearances to count per field (prevents long text from dominating)
+MAX_APPEARANCES = 3
 
 # Entity types to extract and their mappings
 ENTITY_TYPES = {
@@ -70,15 +74,17 @@ FALSE_POSITIVES = {
 }
 
 
-def load_spacy_model():
-    """Load spaCy model, checking if it's installed."""
+def load_spacy_model(model_name: str = "en_core_web_lg"):
+    """Load spaCy model optimized for NER only."""
     try:
-        nlp = spacy.load("en_core_web_sm")
-        print("✓ Loaded spaCy model: en_core_web_sm", flush=True)
+        # Only load components needed for NER (much faster)
+        nlp = spacy.load(model_name, disable=["tok2vec", "tagger", "parser", "attribute_ruler", "lemmatizer"])
+        print(f"✓ Loaded spaCy model: {model_name} (NER-only mode)", flush=True)
         return nlp
     except OSError:
-        print("ERROR: spaCy model 'en_core_web_sm' not found.", flush=True)
-        print("Download it with: python -m spacy download en_core_web_sm", flush=True)
+        print(f"Model '{model_name}' not found.", flush=True)
+        print(f"Please download it manually with:", flush=True)
+        print(f"  uv pip install https://github.com/explosion/spacy-models/releases/download/{model_name}-3.8.0/{model_name}-3.8.0-py3-none-any.whl", flush=True)
         sys.exit(1)
 
 
@@ -107,16 +113,16 @@ def is_valid_entity(text: str) -> bool:
     return True
 
 
-def extract_entities_from_text(nlp, text: str) -> Dict[str, str]:
+def extract_entities_from_text(nlp, text: str) -> Dict[str, Tuple[str, int]]:
     """
     Extract entities from a text string.
-    Returns dict mapping entity text to entity type.
+    Returns dict mapping entity text to (entity_type, count).
     """
     if not text or not isinstance(text, str):
         return {}
     
     doc = nlp(text)
-    entities = {}
+    entities = {}  # entity_text -> (entity_type, count)
     
     for ent in doc.ents:
         if ent.label_ in ENTITY_TYPES:
@@ -124,34 +130,43 @@ def extract_entities_from_text(nlp, text: str) -> Dict[str, str]:
             if is_valid_entity(entity_text):
                 # Map spaCy label to our type
                 entity_type = ENTITY_TYPES[ent.label_]
-                # If entity already seen, keep the first type found
-                if entity_text not in entities:
-                    entities[entity_text] = entity_type
+                if entity_text in entities:
+                    # Increment count, keep same type
+                    old_type, old_count = entities[entity_text]
+                    entities[entity_text] = (old_type, old_count + 1)
+                else:
+                    entities[entity_text] = (entity_type, 1)
     
     return entities
 
 
 def create_tables(conn: duckdb.DuckDBPyConnection):
-    """Create entity and story_entity tables if they don't exist."""
+    """Create entity and story_entity tables (drops existing to ensure schema is current)."""
     print("Creating tables...", flush=True)
+    
+    # Drop and recreate to ensure schema is current
+    conn.execute("DROP TABLE IF EXISTS story_entity")
+    conn.execute("DROP TABLE IF EXISTS entity")
     
     # Create entity table
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS entity (
+        CREATE TABLE entity (
             id INTEGER PRIMARY KEY,
             name VARCHAR,
             type VARCHAR,
-            count INTEGER
+            count INTEGER,
+            active BOOLEAN NOT NULL DEFAULT true
         )
     """)
     
     # Create story_entity table
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS story_entity (
+        CREATE TABLE story_entity (
             story_id INTEGER,
             entity_id INTEGER,
             score REAL,
             in_item_what_happened BOOLEAN,
+            in_item_section BOOLEAN,
             in_item_why_it_matters BOOLEAN,
             in_title BOOLEAN,
             in_body BOOLEAN,
@@ -159,15 +174,9 @@ def create_tables(conn: duckdb.DuckDBPyConnection):
         )
     """)
     
-    print("✓ Tables created/verified", flush=True)
+    print("✓ Tables created", flush=True)
 
 
-def clear_tables(conn: duckdb.DuckDBPyConnection):
-    """Delete all existing entity data."""
-    print("Clearing existing entity data...", flush=True)
-    conn.execute("DELETE FROM story_entity")
-    conn.execute("DELETE FROM entity")
-    print("✓ Cleared existing data", flush=True)
 
 
 def get_stories(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
@@ -176,11 +185,13 @@ def get_stories(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
         SELECT 
             id,
             item_what_happened,
+            item_section,
             item_why_it_matters,
             title,
             body
         FROM story
         WHERE (item_what_happened IS NOT NULL AND item_what_happened != '')
+           OR (item_section IS NOT NULL AND item_section != '')
            OR (item_why_it_matters IS NOT NULL AND item_why_it_matters != '')
            OR (title IS NOT NULL AND title != '')
            OR (body IS NOT NULL AND body != '')
@@ -207,18 +218,26 @@ def extract_entities(nlp, stories_df: pd.DataFrame) -> Tuple[Dict, List]:
     story_entity_rows: List[Tuple] = []
     
     total_stories = len(stories_df)
-    start_time = time.time()
     
     print(f"\nProcessing {total_stories:,} stories...", flush=True)
-    print("-" * 80, flush=True)
     
-    for idx, row in stories_df.iterrows():
+    # Use tqdm for progress bar
+    pbar = tqdm(stories_df.iterrows(), total=total_stories, desc="Extracting entities", unit="story")
+    
+    for idx, row in pbar:
         story_id = int(row['id'])
+        
+        # Update progress bar with entity count
+        pbar.set_postfix({"entities": len(entity_dict)})
         
         # Extract from each field
         entities_what = {}
         if pd.notna(row['item_what_happened']):
             entities_what = extract_entities_from_text(nlp, str(row['item_what_happened']))
+        
+        entities_section = {}
+        if pd.notna(row['item_section']):
+            entities_section = extract_entities_from_text(nlp, str(row['item_section']))
         
         entities_why = {}
         if pd.notna(row['item_why_it_matters']):
@@ -235,61 +254,60 @@ def extract_entities(nlp, stories_df: pd.DataFrame) -> Tuple[Dict, List]:
         # Track which entities appear in which fields for this story
         story_entities: Dict[Tuple[str, str], Dict] = {}
         
+        def init_entity_flags():
+            return {
+                'in_item_what_happened': False,
+                'in_item_section': False,
+                'in_item_why_it_matters': False,
+                'in_title': False,
+                'in_body': False,
+                'score': 0.0
+            }
+        
         # Process item_what_happened
-        for entity_name, entity_type in entities_what.items():
+        for entity_name, (entity_type, count) in entities_what.items():
             key = (entity_name, entity_type)
             if key not in story_entities:
-                story_entities[key] = {
-                    'in_item_what_happened': False,
-                    'in_item_why_it_matters': False,
-                    'in_title': False,
-                    'in_body': False,
-                    'score': 0.0
-                }
+                story_entities[key] = init_entity_flags()
             story_entities[key]['in_item_what_happened'] = True
-            story_entities[key]['score'] += FIELD_WEIGHTS['item_what_happened']
+            capped_count = min(count, MAX_APPEARANCES)
+            story_entities[key]['score'] += FIELD_WEIGHTS['item_what_happened'] * capped_count
+        
+        # Process item_section
+        for entity_name, (entity_type, count) in entities_section.items():
+            key = (entity_name, entity_type)
+            if key not in story_entities:
+                story_entities[key] = init_entity_flags()
+            story_entities[key]['in_item_section'] = True
+            capped_count = min(count, MAX_APPEARANCES)
+            story_entities[key]['score'] += FIELD_WEIGHTS['item_section'] * capped_count
         
         # Process item_why_it_matters
-        for entity_name, entity_type in entities_why.items():
+        for entity_name, (entity_type, count) in entities_why.items():
             key = (entity_name, entity_type)
             if key not in story_entities:
-                story_entities[key] = {
-                    'in_item_what_happened': False,
-                    'in_item_why_it_matters': False,
-                    'in_title': False,
-                    'in_body': False,
-                    'score': 0.0
-                }
+                story_entities[key] = init_entity_flags()
             story_entities[key]['in_item_why_it_matters'] = True
-            story_entities[key]['score'] += FIELD_WEIGHTS['item_why_it_matters']
+            capped_count = min(count, MAX_APPEARANCES)
+            story_entities[key]['score'] += FIELD_WEIGHTS['item_why_it_matters'] * capped_count
         
         # Process title
-        for entity_name, entity_type in entities_title.items():
+        for entity_name, (entity_type, count) in entities_title.items():
             key = (entity_name, entity_type)
             if key not in story_entities:
-                story_entities[key] = {
-                    'in_item_what_happened': False,
-                    'in_item_why_it_matters': False,
-                    'in_title': False,
-                    'in_body': False,
-                    'score': 0.0
-                }
+                story_entities[key] = init_entity_flags()
             story_entities[key]['in_title'] = True
-            story_entities[key]['score'] += FIELD_WEIGHTS['title']
+            capped_count = min(count, MAX_APPEARANCES)
+            story_entities[key]['score'] += FIELD_WEIGHTS['title'] * capped_count
         
         # Process body
-        for entity_name, entity_type in entities_body.items():
+        for entity_name, (entity_type, count) in entities_body.items():
             key = (entity_name, entity_type)
             if key not in story_entities:
-                story_entities[key] = {
-                    'in_item_what_happened': False,
-                    'in_item_why_it_matters': False,
-                    'in_title': False,
-                    'in_body': False,
-                    'score': 0.0
-                }
+                story_entities[key] = init_entity_flags()
             story_entities[key]['in_body'] = True
-            story_entities[key]['score'] += FIELD_WEIGHTS['body']
+            capped_count = min(count, MAX_APPEARANCES)
+            story_entities[key]['score'] += FIELD_WEIGHTS['body'] * capped_count
         
         # Add to entity_dict and story_entity_rows
         for (entity_name, entity_type), flags in story_entities.items():
@@ -307,24 +325,13 @@ def extract_entities(nlp, stories_df: pd.DataFrame) -> Tuple[Dict, List]:
                 entity_id,
                 flags['score'],
                 flags['in_item_what_happened'],
+                flags['in_item_section'],
                 flags['in_item_why_it_matters'],
                 flags['in_title'],
                 flags['in_body']
             ))
         
-        # Progress logging
-        if (idx + 1) % 100 == 0 or (idx + 1) == total_stories:
-            elapsed = time.time() - start_time
-            rate = (idx + 1) / elapsed if elapsed > 0 else 0
-            remaining = (total_stories - (idx + 1)) / rate if rate > 0 else 0
-            
-            print(f"Processed {idx + 1:,}/{total_stories:,} stories "
-                  f"({(idx + 1)/total_stories*100:.1f}%) | "
-                  f"Elapsed: {elapsed/60:.1f}m | "
-                  f"Est. remaining: {remaining/60:.1f}m | "
-                  f"Entities found: {len(entity_dict):,}", flush=True)
-    
-    print("-" * 80, flush=True)
+    pbar.close()
     
     return entity_dict, story_entity_rows, entity_counts
 
@@ -333,28 +340,25 @@ def write_to_database(conn: duckdb.DuckDBPyConnection, entity_dict: Dict, story_
     """Write entities and story_entity relationships to database."""
     print(f"\nWriting to database...", flush=True)
     
-    # Insert entities
+    # Insert entities using DataFrame (much faster than executemany)
     print(f"Inserting {len(entity_dict):,} entities...", flush=True)
-    entity_inserts = []
-    for (name, entity_type), entity_id in entity_dict.items():
-        count = entity_counts[(name, entity_type)]
-        entity_inserts.append((entity_id, name, entity_type, count))
+    entity_data = [
+        (entity_id, name, entity_type, entity_counts[(name, entity_type)], True)
+        for (name, entity_type), entity_id in entity_dict.items()
+    ]
+    entity_df = pd.DataFrame(entity_data, columns=['id', 'name', 'type', 'count', 'active'])
+    conn.execute("INSERT INTO entity (id, name, type, count, active) SELECT * FROM entity_df")
+    print(f"✓ Inserted {len(entity_df):,} entities", flush=True)
     
-    conn.executemany(
-        "INSERT INTO entity (id, name, type, count) VALUES (?, ?, ?, ?)",
-        entity_inserts
-    )
-    print(f"✓ Inserted {len(entity_inserts):,} entities", flush=True)
-    
-    # Insert story_entity relationships
+    # Insert story_entity relationships using DataFrame (much faster)
     print(f"Inserting {len(story_entity_rows):,} story-entity relationships...", flush=True)
-    conn.executemany(
-        """INSERT INTO story_entity 
-           (story_id, entity_id, score, in_item_what_happened, in_item_why_it_matters, in_title, in_body)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        story_entity_rows
-    )
-    print(f"✓ Inserted {len(story_entity_rows):,} relationships", flush=True)
+    se_df = pd.DataFrame(story_entity_rows, columns=[
+        'story_id', 'entity_id', 'score', 
+        'in_item_what_happened', 'in_item_section', 'in_item_why_it_matters', 
+        'in_title', 'in_body'
+    ])
+    conn.execute("INSERT INTO story_entity SELECT * FROM se_df")
+    print(f"✓ Inserted {len(se_df):,} relationships", flush=True)
 
 
 def print_statistics(conn: duckdb.DuckDBPyConnection):
@@ -420,9 +424,6 @@ def main():
     
     # Create tables
     create_tables(conn)
-    
-    # Clear existing data
-    clear_tables(conn)
     
     # Get stories
     print("Fetching stories from database...", flush=True)

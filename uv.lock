@@ -1374,6 +1374,7 @@ dependencies = [
     { name = "playwright" },
     { name = "requests" },
     { name = "spacy" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -1387,6 +1388,7 @@ requires-dist = [
     { name = "playwright", specifier = ">=1.56.0" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "spacy", specifier = ">=3.8.0" },
+    { name = "tqdm", specifier = ">=4.66.0" },
 ]
 
 [[package]]
