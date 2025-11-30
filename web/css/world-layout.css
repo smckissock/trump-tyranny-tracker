@@ -1,0 +1,79 @@
+:root {
+    font-size: calc(0.5em + 1vw);
+
+    --logo-height: 110px;  
+    --section-height: 100px;  
+
+    --left-width: 220px;
+    --center-width: 290px; 
+}
+
+body {
+  font-family: "Source Sans 3", sans-serif;
+  font-weight: 500;
+}
+
+a,
+a:visited,
+a:hover,
+a:focus,
+a:active {
+  text-decoration: none;
+}
+
+.container {
+    display: grid;
+    grid-template-areas:
+        "logo                logo                       filters      "
+        "chart-section       chart-section              chart-month        "
+        "chart-publication   chart-authors              chart-list        ";
+    grid-template-columns: var(--left-width) var(--center-width) 1fr;
+    grid-template-rows: var(--logo-height) var(--section-height) 1fr;
+    gap: 10px 20px;
+    margin: 3px;
+    height: 100vh;  /* 100vh is not enough for some reason */
+    width: calc(100vw - 1.1rem);
+    overflow: hidden;
+}
+
+#logo {
+    grid-area: logo;
+    font-size: 38px;
+    font-weight: 700; 
+    margin-top: 10px;
+
+    fill: rgb(6, 15, 240); 
+}
+
+#filters {
+    grid-area: filters;
+}
+
+#chart-month {
+    grid-area: chart-month;
+}
+
+#chart-section {
+    grid-area: chart-section;
+}
+
+#chart-publication {
+    grid-area: chart-publication;
+    overflow-y: auto;
+}
+
+#chart-authors {
+    grid-area: chart-authors;
+}
+
+
+#chart-list {
+    grid-area: chart-list;
+    overflow: auto;
+}
+
+#chart-topic, #chart-publication, #chart-authors {
+    font-weight: 500;
+    font-size: 16px;
+}
+

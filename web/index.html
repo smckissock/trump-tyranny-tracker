@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width,initial-scale=1'>
+
+    <title>USAID Media Coverage</title>  
+
+    <link rel='icon' type='image/x-icon' href='img/favicon.ico'>
+
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@200..900&display=swap" rel="stylesheet">
+
+    <script src='https://unpkg.com/crossfilter2@1.4.8/crossfilter.js'></script>
+    <script src='https://d3js.org/d3.v7.min.js'></script>
+    <script src='https://unpkg.com/dc@4.2.7/dist/dc.js'></script>
+   
+    <script type='module' src='js/trumpTyrannyTracker.js'></script>
+    
+    <link href='https://cdn.jsdelivr.net/npm/dc@4.2.7/dist/style/dc.min.css' rel='stylesheet' type='text/css'>
+    
+    <link href='css/world-layout.css' rel='stylesheet' type='text/css'>
+    <link href='css/world-style.css' rel='stylesheet' type='text/css'>
+</head>
+
+<body>
+    <div id="loading-overlay" class="loading-hidden">
+        <div class="spinner"></div>
+    </div>
+
+    <div id='chart-container' class='container'>
+        <div id='logo'>
+            <h1><span style='color:#0000CC'>Trump Tyranny Tracker</span></h1>
+            <h3> Compiled by Olga Lautman</h3>
+            <div id="updated-stories" class="subtitle-updated">
+            </div>
+        </div>
+
+        <div id='filters'></div>
+        <div id='chart-month'></div>
+        <div id='chart-section'></div>
+        <div id='chart-list'></div>
+    </div>
+
+    <script data-goatcounter="https://smckissock.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js">
+    </script>
+</body>
+</html>
