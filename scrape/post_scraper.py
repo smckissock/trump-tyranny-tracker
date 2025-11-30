@@ -18,28 +18,43 @@ class PostScraper:
     def __init__(self):
         pass
     
-    def fetch_post_page(self, url: str) -> str:
-        """Fetch a post page HTML."""
+    def fetch_post_page(self, url: str, max_retries: int = 3) -> str:
+        """Fetch a post page HTML with retry logic."""
         logger.info(f"Fetching post page: {url}")
         
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(url, wait_until='networkidle')
-            
-            # Wait for article content to load
+        last_error = None
+        
+        for attempt in range(1, max_retries + 1):
             try:
-                page.wait_for_selector('article, .post-content, .body-markup, h3', timeout=10000)
-            except:
-                logger.warning(f"Timeout waiting for content selector on {url}")
-            
-            # Additional wait for dynamic content
-            page.wait_for_timeout(2000)
-            
-            html = page.content()
-            browser.close()
-            
-        return html
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=True)
+                    page = browser.new_page()
+                    
+                    # Use domcontentloaded (faster) with increasing timeout on retries
+                    timeout = 30000 + (attempt - 1) * 15000  # 30s, 45s, 60s
+                    page.goto(url, wait_until='domcontentloaded', timeout=timeout)
+                    
+                    # Wait for article content to load
+                    try:
+                        page.wait_for_selector('article, .post-content, .body-markup, h3', timeout=15000)
+                    except:
+                        logger.warning(f"Timeout waiting for content selector on {url}")
+                    
+                    # Additional wait for dynamic content
+                    page.wait_for_timeout(2000)
+                    
+                    html = page.content()
+                    browser.close()
+                    
+                return html
+                
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries:
+                    logger.warning(f"Attempt {attempt}/{max_retries} failed for {url}: {e}. Retrying...")
+                else:
+                    logger.error(f"All {max_retries} attempts failed for {url}")
+                    raise last_error
     
     def parse_post(self, html: str, post_url: str) -> Dict:
         """Parse a post page and extract structured data."""
@@ -299,31 +314,39 @@ class PostScraper:
                     # Check if it has the header-anchor-post class
                     classes = elem.get('class', [])
                     if 'header-anchor-post' in classes or not classes:
-                        # Extract item_section_type from <strong> tag if present
-                        item_section_type = section_name  # Default to section_name
-                        item_section = ""  # Will be h3 text excluding strong
+                        # Pattern to match section headers (emoji + "In ... News")
+                        section_pattern = r'[🔥🛡️⚖️👊🏼📊🔎💡🚨].*In .+ News'
+                        
+                        item_section_type = section_name  # Default to current section
+                        item_section = ""  # The item title
                         
                         strong_tag = elem.find('strong')
                         if strong_tag:
-                            # Extract text from strong tag as item_section_type
-                            item_section_type = strong_tag.get_text(strip=True)
-                            # Extract h3 text excluding the strong tag as item_section
-                            # Clone the element and remove strong tag to get remaining text
-                            elem_copy = BeautifulSoup(str(elem), 'lxml').find('h3')
-                            if elem_copy:
-                                strong_in_copy = elem_copy.find('strong')
-                                if strong_in_copy:
-                                    strong_in_copy.decompose()  # Remove strong tag
-                                item_section = elem_copy.get_text(strip=True)
+                            strong_text = strong_tag.get_text(strip=True)
+                            
+                            # Check if this is a section header (newer format: strong contains emoji section)
+                            if re.search(section_pattern, strong_text):
+                                # This is a section header, skip it
+                                i += 1
+                                continue
+                            else:
+                                # This is an item title (older format: strong contains title)
+                                item_section = strong_text
+                                # item_section_type stays as the current section
                         else:
-                            # No strong tag, use full text as item_section
-                            item_section = text
+                            # No strong tag
+                            # Check if this is a section header (older format: h3 text contains emoji section)
+                            if re.search(section_pattern, text):
+                                # This is a section header, skip it
+                                i += 1
+                                continue
+                            else:
+                                # This is an item title (newer format: h3 text is the title)
+                                item_section = text
                         
-                        title_text = item_section if item_section else text
-                        # Item titles are usually longer than 20 chars and not section headers
-                        is_item_title = (len(title_text) > 20 and 
-                                       not re.search(r'[🔥🛡️⚖️👊🏼📊🔎💡🚨]', title_text) and
-                                       not ('In' in title_text and 'News' in title_text))
+                        title_text = item_section
+                        # Item titles are usually longer than 20 chars
+                        is_item_title = len(title_text) > 20
             
             if is_item_title and title_text:
                 # Ensure variables are defined

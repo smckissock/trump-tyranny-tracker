@@ -24,7 +24,6 @@ def create_database_and_table(db_path: str = 'data/stories.duckdb'):
     conn = duckdb.connect(db_path)
     
     # Create the story table
-    # Note: item_section_type and item_section should be created by migration script
     create_table_sql = """
     CREATE TABLE IF NOT EXISTS story (
         id INTEGER PRIMARY KEY,
@@ -41,6 +40,8 @@ def create_database_and_table(db_path: str = 'data/stories.duckdb'):
         body TEXT,
         authors VARCHAR,
         image VARCHAR,
+        publish_date TIMESTAMP,
+        summary TEXT,
         errors VARCHAR
     )
     """
@@ -94,7 +95,7 @@ def import_csv_to_db(conn, csv_path: str = 'data/scraped_posts.csv', update_exis
                 post_name,
                 post_author,
                 post_date,
-                COALESCE(item_section_type, section) as item_section_type,
+                item_section_type,
                 item_section,
                 item_what_happened,
                 item_why_it_matters,
@@ -202,6 +203,8 @@ def import_csv_to_db(conn, csv_path: str = 'data/scraped_posts.csv', update_exis
             body,
             authors,
             image,
+            publish_date,
+            summary,
             errors
         )
         SELECT 
@@ -209,7 +212,7 @@ def import_csv_to_db(conn, csv_path: str = 'data/scraped_posts.csv', update_exis
             post_name,
             post_author,
             post_date,
-            COALESCE(item_section_type, section) as item_section_type,
+            item_section_type,
             item_section,
             item_what_happened,
             item_why_it_matters,
@@ -219,6 +222,8 @@ def import_csv_to_db(conn, csv_path: str = 'data/scraped_posts.csv', update_exis
             NULL as body,
             NULL as authors,
             NULL as image,
+            NULL as publish_date,
+            NULL as summary,
             NULL as errors
         FROM read_csv_auto(?, header=true, auto_detect=true, null_padding=true)
         """
@@ -243,8 +248,8 @@ def main():
         # Create database and table
         conn = create_database_and_table(db_path)
         
-        # Import CSV data (update existing rows to preserve enriched data)
-        count = import_csv_to_db(conn, csv_path, update_existing=True)
+        # Import CSV data (delete and recreate - we need fresh data)
+        count = import_csv_to_db(conn, csv_path, update_existing=False)
         
         # Show some sample data
         logger.info("\nSample data from story table:")

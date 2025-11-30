@@ -14,8 +14,9 @@ Usage:
 import sys
 import io
 import time
+from datetime import datetime, date
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 # Force UTF-8 encoding for stdout/stderr on Windows
 if sys.platform == 'win32':
@@ -36,11 +37,22 @@ AUTH_STATE_FILE = DATA_DIR / "enrich_auth.json"
 REQUEST_DELAY = 2  # seconds between requests (different domains, so shorter delay is fine)
 
 
+def normalize_timestamp(value) -> Optional[datetime]:
+    """Return a Python datetime or None. Empty/invalid values -> None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime.combine(value, datetime.min.time())
+    return None
+
+
 def get_stories_to_enrich(conn: duckdb.DuckDBPyConnection, limit: int | None = None) -> list[tuple]:
     """
     Get stories that need enrichment.
     Includes stories with errors (to retry) and stories missing enriched fields.
-    Skips stories that were successfully enriched (have title, body, authors, image).
+    Skips stories that were successfully enriched (have title, body, authors, image, publish_date, summary).
     Returns list of (story_id, source_url).
     """
     sql = """
@@ -56,7 +68,9 @@ def get_stories_to_enrich(conn: duckdb.DuckDBPyConnection, limit: int | None = N
               (title IS NULL OR title = '' 
                OR body IS NULL OR body = ''
                OR authors IS NULL OR authors = ''
-               OR image IS NULL OR image = '')
+               OR image IS NULL OR image = ''
+               OR publish_date IS NULL
+               OR summary IS NULL OR summary = '')
           )
         ORDER BY id
     """
@@ -104,6 +118,8 @@ def process_url_newspaper(url: str) -> dict[str, Any]:
             "body": getattr(art, "text", "") or "",
             "authors": ", ".join(getattr(art, "authors", []) or []),
             "image": getattr(art, "top_image", "") or "",
+            "publish_date": normalize_timestamp(getattr(art, "publish_date", None)),
+            "summary": getattr(art, "summary", "") or "",
             "success": True,
             "error": None,
         }
@@ -121,6 +137,8 @@ def process_url_newspaper(url: str) -> dict[str, Any]:
             "body": None,
             "authors": None,
             "image": None,
+            "publish_date": None,
+            "summary": None,
             "success": False,
             "error": error_msg,
         }
@@ -161,6 +179,8 @@ def process_url_playwright(url: str, page) -> dict[str, Any]:
             "body": getattr(art, "text", "") or "",
             "authors": ", ".join(getattr(art, "authors", []) or []),
             "image": getattr(art, "top_image", "") or "",
+            "publish_date": normalize_timestamp(getattr(art, "publish_date", None)),
+            "summary": getattr(art, "summary", "") or "",
             "success": True,
             "error": None,
         }
@@ -170,6 +190,8 @@ def process_url_playwright(url: str, page) -> dict[str, Any]:
             "body": None,
             "authors": None,
             "image": None,
+            "publish_date": None,
+            "summary": None,
             "success": False,
             "error": f"Playwright: {type(e).__name__}: {e}",
         }
@@ -183,6 +205,8 @@ def update_story(conn: duckdb.DuckDBPyConnection, story_id: int, article: dict[s
     body = article.get("body")
     authors = article.get("authors")
     image = article.get("image")
+    publish_date = article.get("publish_date")
+    summary = article.get("summary")
     error = article.get("error")
     
     # Build update statement dynamically based on what we have
@@ -201,6 +225,12 @@ def update_story(conn: duckdb.DuckDBPyConnection, story_id: int, article: dict[s
     if image:
         updates.append("image = ?")
         params.append(image)
+    if publish_date:
+        updates.append("publish_date = ?")
+        params.append(publish_date)
+    if summary:
+        updates.append("summary = ?")
+        params.append(summary)
     
     # Always update errors field
     updates.append("errors = ?")
