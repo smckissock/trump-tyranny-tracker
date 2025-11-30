@@ -151,25 +151,17 @@ export class TrumpTyrannyTracker {
         const sectionContainer = d3.select('#chart-section');        
         sectionContainer.html(''); 
         
-        TrumpTyrannyTracker.sections.forEach(section => {
+        TrumpTyrannyTracker.sections.forEach((section, index) => {
             const panel = sectionContainer.append('div')
                 .attr('class', 'section-panel')
                 .attr('data-section', section.name)
                 .on('click', function() {
                     const clickedSection = d3.select(this).attr('data-section');
-                    const isActive = d3.select(this).classed('active');
                     
-                    // Clear all section panel active states
+                    // Radio button behavior - always select clicked, can't deselect
                     d3.selectAll('.section-panel').classed('active', false);
-                    
-                    if (isActive) {
-                        // Clicking active panel - clear filter
-                        dc.sectionDimension.filterAll();
-                    } else {
-                        // Clicking inactive panel - apply filter
-                        d3.select(this).classed('active', true);
-                        dc.sectionDimension.filter(clickedSection);
-                    }
+                    d3.select(this).classed('active', true);
+                    dc.sectionDimension.filter(clickedSection);
                     
                     dc.redrawAll();
                     window.ttt.refresh();
@@ -179,6 +171,18 @@ export class TrumpTyrannyTracker {
                 .attr('class', 'section-name')
                 .text(section.name);
         });
+        
+        // Select first section by default
+        this.selectSection(0);
+    }
+    
+    selectSection(index) {
+        const section = TrumpTyrannyTracker.sections[index];
+        if (section) {
+            d3.selectAll('.section-panel').classed('active', false);
+            d3.select(d3.selectAll('.section-panel').nodes()[index]).classed('active', true);
+            dc.sectionDimension.filter(section.name);
+        }
     }
 
     refresh() {          
@@ -240,15 +244,17 @@ export class TrumpTyrannyTracker {
 
         if (hasActiveFilters) {
             d3.select('#clear-filters').on('click', () => {
-                dc.sectionDimension.filterAll();
-                d3.selectAll('.section-panel').classed('active', false);
+                // Clear row chart filters
                 dc.filterAll();
+                
+                // Reset to first section (radio button behavior)
+                window.ttt.selectSection(0);
 
                 const state = dc.states?.find(d => d.checked);
                 if (state) state.checked = false;
 
-                dc.refresh();
-                window.ttt.listStories();
+                dc.redrawAll();
+                window.ttt.refresh();
             });
         }
 
@@ -264,12 +270,20 @@ export class TrumpTyrannyTracker {
     }
 
     listStories() {
-
-        return; 
-        const storiesToShow = 60;
+        const storiesToShow = 100;
+        
         function storyResult(d) {
+            const url = d.sourceUrl || '#';
+            const hasLink = d.sourceUrl && d.sourceUrl.length > 0;
+            const title = d.title || d.itemSection || 'Untitled';
+            const excerpt = d.itemWhatHappened || '';
+            const source = d.sourceName || '';
+            const authors = d.authors || '';
+            const dateStr = d.publishDate ? formatDate(new Date(d.publishDate)) : '';
+            
             return `
-              <div class="story" onclick="window.open('${d.url}', '_blank', 'noopener')">
+              <div class="story" ${hasLink ? `onclick="window.open('${url}', '_blank', 'noopener')"` : ''}>
+                ${d.image ? `
                 <img
                   class="story-image"
                   src="${d.image}"
@@ -277,30 +291,22 @@ export class TrumpTyrannyTracker {
                   onerror="this.style.display='none'"
                   height="90"
                   width="120"
-                >
+                >` : ''}
                 <div class="story-body">
                   <h5 class="story-topic">
-                    <strong>${d.sourceName}</strong> ${formatDate(d.date)} ${d.authors}
-                    <span style="margin-right:20px;float:right;color:'#333'}">
-                      ${d.country}
-                    </span>
+                    <strong>${source}</strong> ${dateStr} ${authors}
                   </h5>
-                  <h3 class="story-title">${d.title}</h3>
-                  <p class="story-excerpt">
-                    ${d.sentence.replace(
-                      /USAID/gi,
-                      `<b><span style="color:#00f">US</span><span style="color:#c00">AID</span></b>`
-                    )}
-                  </p>
+                  <h3 class="story-title">${title}</h3>
+                  <p class="story-excerpt">${excerpt}</p>
                 </div>
               </div>
             `;
         }
 
-        let html = this.facts.allFiltered()
-            .sort((a, b) =>
-                new Date(b.date) - new Date(a.date)
-            )
+        const filtered = this.facts.allFiltered();
+        
+        let html = filtered
+            .sort((a, b) => new Date(b.publishDate || 0) - new Date(a.publishDate || 0))
             .slice(0, storiesToShow)
             .map(d => storyResult(d))
             .join('');

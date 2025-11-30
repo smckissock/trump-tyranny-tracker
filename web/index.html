@@ -14,6 +14,11 @@
     <script src='https://unpkg.com/crossfilter2@1.4.8/crossfilter.js'></script>
     <script src='https://d3js.org/d3.v7.min.js'></script>
     <script src='https://unpkg.com/dc@4.2.7/dist/dc.js'></script>
+    
+    <!-- Search autocomplete libraries -->
+    <script src='https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js'></script>
+    <script src='https://cdn.jsdelivr.net/npm/awesomplete@1.1.5/awesomplete.min.js'></script>
+    <link href='https://cdn.jsdelivr.net/npm/awesomplete@1.1.5/awesomplete.css' rel='stylesheet' type='text/css'>
    
     <script type='module' src='js/trumpTyrannyTracker.js'></script>
     
@@ -30,13 +35,19 @@
 
     <div id='chart-container' class='container'>
         <div id='logo'>
-            <h1><span style='color:#0000CC'>Trump Tyranny Tracker</span></h1>
+            <h1><span>Trump Tyranny Tracker</span></h1>
             <h3> Compiled by Olga Lautman</h3>
             <div id="updated-stories" class="subtitle-updated">
             </div>
         </div>
 
         <div id='filters'></div>
+        
+        <div id='search-container'>
+            <input id='entity-search' type='text' placeholder='Search for people, organizations, places...' autocomplete='off'>
+            <button id='clear-search' style='display:none;'>✕</button>
+        </div>
+        
         <div id='chart-month'></div>
         <div id='chart-section'></div>
         <div id='chart-list'></div>

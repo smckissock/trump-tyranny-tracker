@@ -11,9 +11,9 @@
 }
 
 #logo h3 {
-    font-size: 20px !important;
+    font-size: 22px !important;
     font-weight: 700 !important;
-    margin: 1px 0 0 0;
+    margin: 15px 0 0 0;
     padding: 0;
     line-height: 1;
 }
@@ -387,4 +387,68 @@ p.story-excerpt {
     font-size: 0.7em;
     color: #333;
     margin-bottom: 0px;
+}
+
+
+/* Search autocomplete */
+#search-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 15px 0;
+}
+
+#entity-search {
+    width: 350px;
+    padding: 10px 14px;
+    font-size: 15px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#entity-search:focus {
+    border-color: #0066cc;
+}
+
+#entity-search::placeholder {
+    color: #999;
+}
+
+#clear-search {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#clear-search:hover {
+    background: #e0e0e0;
+}
+
+/* Awesomplete overrides */
+.awesomplete > ul {
+    max-height: 300px;
+    overflow-y: auto;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.awesomplete > ul > li {
+    padding: 10px 14px;
+    font-size: 14px;
+}
+
+.awesomplete > ul > li:hover,
+.awesomplete > ul > li[aria-selected="true"] {
+    background: #0066cc;
+    color: white;
+}
+
+.awesomplete mark {
+    background: #ffeb3b;
+    padding: 0;
 }

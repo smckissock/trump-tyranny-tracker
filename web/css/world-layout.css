@@ -25,7 +25,7 @@ a:active {
     display: grid;
     grid-template-areas:
         "logo                logo                       filters      "
-        "chart-section       chart-section              chart-month        "
+        "chart-section       chart-section              search        "
         "chart-publication   chart-authors              chart-list        ";
     grid-template-columns: var(--left-width) var(--center-width) 1fr;
     grid-template-rows: var(--logo-height) var(--section-height) 1fr;
@@ -34,6 +34,10 @@ a:active {
     height: 100vh;  /* 100vh is not enough for some reason */
     width: calc(100vw - 1.1rem);
     overflow: hidden;
+}
+
+#search-container {
+    grid-area: search;
 }
 
 #logo {
