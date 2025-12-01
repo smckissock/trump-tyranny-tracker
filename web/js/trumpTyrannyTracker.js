@@ -28,8 +28,7 @@ export class TrumpTyrannyTracker {
         const overlay = document.getElementById('loading-overlay');
         overlay.classList.replace('loading-hidden','loading-visible');
 
-        const isLocal = location.hostname.includes('127.0.0.1');
-        const dataPath = isLocal ? 'data/' : '/data/';
+        const dataPath = 'data/';
 
         console.log(dataPath + 'world_stories.csv.gz')
         const downloadedStories = await loadCompressedCsv(dataPath + 'story.csv.gz');
