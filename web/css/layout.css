@@ -31,7 +31,7 @@ a:active {
     grid-template-areas:
         "logo            chart-section      chart-section    chart-section"
         "search          search             filters          filters"
-        "chart-list      chart-list         chart-sourceName chart-authors";
+        "chart-list      chart-list         charts-right     charts-right";
     grid-template-columns: var(--list-left-width) 1fr var(--source-width) var(--authors-width);
     grid-template-rows: var(--logo-height) var(--section-height) 1fr;
     gap: 10px 10px;
@@ -75,19 +75,27 @@ a:active {
     grid-area: chart-section;
 }
 
-#chart-sourceName {
-    grid-area: chart-sourceName;
+#charts-right {
+    grid-area: charts-right;
+    display: flex;
+    gap: 10px;
     overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#chart-sourceName {
+    flex: 1;
 }
 
 #chart-authors {
-    grid-area: chart-authors;
+    flex: 1;
 }
 
 
 #chart-list {
     grid-area: chart-list;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 #chart-topic, #chart-sourceName, #chart-authors {

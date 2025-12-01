@@ -174,6 +174,9 @@ export class TrumpTyrannyTracker {
         
         console.log(`Filtering by entity: ${entityName} (${storyIds.size} stories)`);
         
+        // Store selected entity name
+        this.selectedEntity = entityName;
+        
         // Filter to only stories with matching IDs
         this.idDimension.filter(id => storyIds.has(id));
         
@@ -183,6 +186,7 @@ export class TrumpTyrannyTracker {
 
     clearEntityFilter() {
         if (this.idDimension) {
+            this.selectedEntity = null;
             this.idDimension.filterAll();
             dc.redrawAll();
             this.refresh();
@@ -339,6 +343,7 @@ export class TrumpTyrannyTracker {
             
         const stories = dc.facts.allFiltered().length;
         d3.select('#case-count').text(`${addCommas(stories)} cases`);
+        d3.select('#selected-entity').text(window.ttt.selectedEntity || '');
         d3.select('#filters')
             .html(`
                 <span class='case-filters'>${filters.join(', ')}</span>
