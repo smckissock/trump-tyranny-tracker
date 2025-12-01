@@ -1,5 +1,7 @@
 # Trump Tyranny Tracker Explorer
 
+## [Live Site](https://smckissock.github.io/trump-tyranny-tracker/)
+
 An interactive tool for exploring and searching the news stories documented by **[Olga Lautman's Trump Tyranny Tracker](https://trumptyrannytracker.substack.com/)**.
 
 ---
