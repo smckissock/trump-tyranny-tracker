@@ -24,14 +24,14 @@ a:active {
 .container {
     display: grid;
     grid-template-areas:
-        "logo                logo                       filters      "
-        "chart-section       chart-section              search        "
-        "chart-publication   chart-authors              chart-list        ";
+        "logo           logo           filters"
+        "chart-section  chart-section  search"
+        "chart-sourceName chart-authors chart-list";
     grid-template-columns: var(--left-width) var(--center-width) 1fr;
     grid-template-rows: var(--logo-height) var(--section-height) 1fr;
     gap: 10px 20px;
     margin: 3px;
-    height: 100vh;  /* 100vh is not enough for some reason */
+    height: 100vh;
     width: calc(100vw - 1.1rem);
     overflow: hidden;
 }
@@ -61,8 +61,8 @@ a:active {
     grid-area: chart-section;
 }
 
-#chart-publication {
-    grid-area: chart-publication;
+#chart-sourceName {
+    grid-area: chart-sourceName;
     overflow-y: auto;
 }
 
@@ -76,7 +76,7 @@ a:active {
     overflow: auto;
 }
 
-#chart-topic, #chart-publication, #chart-authors {
+#chart-topic, #chart-sourceName, #chart-authors {
     font-weight: 500;
     font-size: 16px;
 }

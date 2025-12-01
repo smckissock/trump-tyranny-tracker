@@ -12,11 +12,15 @@ export class RowChart {
         const ROW_HEIGHT = 22;
         const MARGINS = { top: 0, right: 10, bottom: 20, left: 10 };
 
-        // Add container + label
-        d3.select('#chart-container')
-            .append('div')
-            .attr('id', 'chart-' + attribute)
-            .html(`<div>${title}</div>`);
+        // Add label to existing container (or create if missing)
+        const containerId = 'chart-' + attribute;
+        let container = d3.select('#' + containerId);
+        if (container.empty()) {
+            container = d3.select('#chart-container')
+                .append('div')
+                .attr('id', containerId);
+        }
+        container.html(`<div>${title}</div>`);
 
         function generatePublicationColorMap(facts) {
             const map = {};

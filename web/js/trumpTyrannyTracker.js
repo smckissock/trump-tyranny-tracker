@@ -71,10 +71,123 @@ export class TrumpTyrannyTracker {
         this.facts = crossfilter(stories);
         dc.facts = this.facts;
 
+        // Load entities for search
+        await this.loadEntities(dataPath);
+
         this.setupCharts();
+        this.setupEntitySearch();
         dc.renderAll();
         this.refresh();       
         overlay.classList.replace('loading-visible','loading-hidden'); 
+    }
+
+    async loadEntities(dataPath) {
+        try {
+            const response = await fetch(dataPath + 'entities.json.gz');
+            const buffer = await response.arrayBuffer();
+            const decompressed = pako.inflate(new Uint8Array(buffer), { to: 'string' });
+            this.entities = JSON.parse(decompressed);
+            console.log(`Loaded ${this.entities.length} entities for search`);
+        } catch (e) {
+            console.warn('Could not load entities.json.gz, trying uncompressed...', e);
+            try {
+                const response = await fetch(dataPath + 'entities.json');
+                this.entities = await response.json();
+                console.log(`Loaded ${this.entities.length} entities for search (uncompressed)`);
+            } catch (e2) {
+                console.warn('Could not load entities for search', e2);
+                this.entities = [];
+            }
+        }
+    }
+
+    setupEntitySearch() {
+        if (!this.entities || this.entities.length === 0) {
+            console.warn('No entities loaded, search disabled');
+            return;
+        }
+
+        const searchInput = document.getElementById('entity-search');
+        const clearBtn = document.getElementById('clear-search');
+        
+        if (!searchInput) return;
+
+        // Create a Set of story IDs for fast lookup (convert to numbers for consistent matching)
+        this.entityMap = new Map();
+        this.entities.forEach(e => {
+            // Store IDs as numbers for consistent matching
+            const ids = new Set(e.storyIds.map(id => Number(id)));
+            this.entityMap.set(e.name, ids);
+        });
+        
+
+        // Create ID dimension for filtering (convert to number for consistent matching)
+        this.idDimension = this.facts.dimension(d => Number(d.id));
+        dc.idDimension = this.idDimension;
+
+        // Initialize Fuse.js for fuzzy search
+        this.fuse = new Fuse(this.entities, {
+            keys: ['name'],
+            threshold: 0.3,
+            includeScore: true
+        });
+
+        // Initialize Awesomplete
+        this.awesomplete = new Awesomplete(searchInput, {
+            minChars: 2,
+            maxItems: 15,
+            autoFirst: true
+        });
+
+        // Update suggestions on input
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.trim();
+            if (query.length < 2) {
+                this.awesomplete.list = [];
+                return;
+            }
+            
+            const results = this.fuse.search(query);
+            this.awesomplete.list = results.slice(0, 15).map(r => r.item.name);
+        });
+
+        // Handle selection
+        searchInput.addEventListener('awesomplete-selectcomplete', (e) => {
+            const entityName = e.text.value;
+            this.filterByEntity(entityName);
+            clearBtn.style.display = 'inline-block';
+        });
+
+        // Clear button
+        clearBtn.addEventListener('click', () => {
+            this.clearEntityFilter();
+            searchInput.value = '';
+            clearBtn.style.display = 'none';
+        });
+    }
+
+    filterByEntity(entityName) {
+        const storyIds = this.entityMap.get(entityName);
+        if (!storyIds) {
+            console.warn(`Entity not found: ${entityName}`);
+            return;
+        }
+        
+        console.log(`Filtering by entity: ${entityName} (${storyIds.size} stories)`);
+        
+        // Filter to only stories with matching IDs
+        this.idDimension.filter(id => storyIds.has(id));
+        
+        dc.redrawAll();
+        this.refresh();
+    }
+
+    clearEntityFilter() {
+        if (this.idDimension) {
+            this.idDimension.filterAll();
+            dc.redrawAll();
+            this.refresh();
+        }
     }
 
     setupCharts() {
