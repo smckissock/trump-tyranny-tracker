@@ -1,12 +1,16 @@
 :root {
     font-size: calc(0.5em + 1vw);
 
-    --logo-height: 100px;  
-    --section-height: 120px;  
+    --logo-height: 80px;  
+    --section-height: 80x;  
 
     --left-width: 220px;
     --center-width: 290px;
-    --right-width: 100px;
+    --right-width: 200px;
+
+    --list-left-width: 340px;
+    --source-width: 160px;
+    --authors-width: 160px; 
 }
 
 body {
@@ -25,12 +29,12 @@ a:active {
 .container {
     display: grid;
     grid-template-areas:
-        "logo               logo           filters        right-col"
-        "chart-section      chart-section   search         right-col"
-        "chart-sourceName   chart-authors   chart-list    right-col";
-    grid-template-columns: var(--left-width) var(--center-width) 1fr var(--right-width);
+        "logo            chart-section      chart-section    chart-section"
+        "search          search             filters          filters"
+        "chart-list      chart-list         chart-sourceName chart-authors";
+    grid-template-columns: var(--list-left-width) 1fr var(--source-width) var(--authors-width);
     grid-template-rows: var(--logo-height) var(--section-height) 1fr;
-    gap: 10px 20px;
+    gap: 10px 10px;
     margin: 3px;
     height: 100vh;
     width: calc(100vw - 1.1rem);

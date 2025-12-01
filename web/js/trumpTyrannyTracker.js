@@ -7,8 +7,7 @@ export class TrumpTyrannyTracker {
     constructor() {
         if (window.location.hostname === '127.0.0.1') 
             document.title = 'Trump Tyranny Tracker DEV';
-
-        this.configure();        
+    
         this.stories = null; // defer loading
         window.ttt = this;
 
@@ -21,9 +20,9 @@ export class TrumpTyrannyTracker {
         }
     }
 
-    configure() {
-        dc.leftWidth = 200;
-    }
+    // configure() {
+    //     dc.leftWidth = 170;
+    // }
    
     async getData() {      
         const overlay = document.getElementById('loading-overlay');
@@ -191,10 +190,12 @@ export class TrumpTyrannyTracker {
     }
 
     setupCharts() {
+        const chartWidth = 160
+
         dc.refresh = this.refresh;
         dc.rowCharts = [
-            new RowChart(this.facts, 'sourceName', dc.leftWidth, 180, this.refresh, 'Publication', null, true),
-            new RowChart(this.facts, 'authors', dc.leftWidth, 200, this.refresh, 'Author', null, true)
+            new RowChart(this.facts, 'sourceName',  chartWidth, 200, this.refresh, 'Publication', null, true),
+            new RowChart(this.facts, 'authors',     chartWidth, 200, this.refresh, 'Author', null, true)
         ];
         this.setupMonthChart();
 
@@ -311,16 +312,7 @@ export class TrumpTyrannyTracker {
             }
         });
         
-        // Add section filter if active
-        if (dc.sectionDimension) {
-            const sectionFilter = dc.sectionDimension.currentFilter();
-            if (sectionFilter) {
-                filterTypes.push({
-                    name: 'Section',
-                    filters: [sectionFilter]
-                });
-            }
-        }
+        // Section filter is always active (radio button behavior), so don't show a filter box for it
 
         // Add month (range) filter if active
         if (dc.monthDimension) {
@@ -344,32 +336,16 @@ export class TrumpTyrannyTracker {
         `).join('');
         
         const hasActiveFilters = filterTypes.length > 0;
-        const clearButton = hasActiveFilters ? `<button id='clear-filters' class='clear-button'>Clear Filters</button>` : '';
             
         const stories = dc.facts.allFiltered().length;
+        d3.select('#case-count').text(`${addCommas(stories)} cases`);
         d3.select('#filters')
             .html(`
-                ${clearButton}
-                <span class='case-count'> ${addCommas(stories)} stories </b></span> &nbsp;
                 <span class='case-filters'>${filters.join(', ')}</span>
                 <div class='filter-boxes-container'>${filterBoxes}</div>
             `);
 
         if (hasActiveFilters) {
-            d3.select('#clear-filters').on('click', () => {
-                // Clear row chart filters
-                dc.filterAll();
-                
-                // Reset to first section (radio button behavior)
-                window.ttt.selectSection(0);
-
-                const state = dc.states?.find(d => d.checked);
-                if (state) state.checked = false;
-
-                dc.redrawAll();
-                window.ttt.refresh();
-            });
-
             // Individual filter box close buttons
             d3.selectAll('.filter-box-close').on('click', function(event) {
                 event.stopPropagation();

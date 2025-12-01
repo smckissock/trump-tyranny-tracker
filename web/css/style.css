@@ -1,5 +1,5 @@
 #logo h1 {
-    font-size: 48px !important;
+    font-size: 30px !important;
     font-weight: 700 !important;
     margin: 0;
     padding: 0;
@@ -11,7 +11,7 @@
 }
 
 #logo h3 {
-    font-size: 22px !important;
+    font-size: 18px !important;
     font-weight: 700 !important;
     margin: 10px 0 0 0;
     padding: 0;
@@ -42,7 +42,7 @@
 
 .dc-chart g.row text {
     fill: #000;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500; 
 }
 
@@ -287,8 +287,8 @@ p.story-excerpt {
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
-    width: 100px;
-    height: 80px;
+    width: 140px;
+    height: 50px;
     flex-shrink: 0;
 }
 
@@ -437,6 +437,13 @@ p.story-excerpt {
     color: #999;
 }
 
+.search-icon {
+    font-size: 16px;
+    margin-left: -30px;
+    margin-right: 10px;
+    opacity: 0.6;
+}
+
 #clear-search {
     background: #f0f0f0;
     border: 1px solid #ccc;
@@ -448,6 +455,12 @@ p.story-excerpt {
 
 #clear-search:hover {
     background: #e0e0e0;
+}
+
+#case-count {
+    margin-left: 15px;
+    font-size: 18px;
+    font-weight: 500;
 }
 
 /* Awesomplete overrides */
