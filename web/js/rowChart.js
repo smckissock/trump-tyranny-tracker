@@ -74,7 +74,7 @@ export class RowChart {
 
 
         function removeZeroes(group) {
-            const keep = d => d.value > 0;
+            const keep = d => d.value > 0 && d.key !== '' && d.key != null;
             return {
                 all: () => group.all().filter(keep),
                 top: n => group.top(Infinity).filter(keep).slice(0, n)
