@@ -383,29 +383,44 @@ export class TrumpTyrannyTracker {
         function storyResult(d) {
             const url = d.sourceUrl || '#';
             const hasLink = d.sourceUrl && d.sourceUrl.length > 0;
-            const title = d.title || d.itemSection || 'Untitled';
-            const excerpt = d.itemWhatHappened || '';
+            const itemTitle = d.itemSection || '';
+            const whatHappened = d.itemWhatHappened || '';
+            const whyItMatters = d.itemWhyItMatters || '';
             const source = d.sourceName || '';
             const authors = d.authors || '';
+            const articleTitle = d.title || '';
             const dateStr = d.publishDate ? formatDate(new Date(d.publishDate)) : '';
             
+            // Skip stories with blocked content
+            if (articleTitle.includes('Access to this page has been denied')) return '';
+            
             return `
-              <div class="story" ${hasLink ? `onclick="window.open('${url}', '_blank', 'noopener')"` : ''}>
-                ${d.image ? `
-                <img
-                  class="story-image"
-                  src="${d.image}"
-                  onload="this.classList.add('loaded')"
-                  onerror="this.style.display='none'"
-                  height="90"
-                  width="120"
-                >` : ''}
-                <div class="story-body">
-                  <h5 class="story-topic">
-                    <strong>${source}</strong> ${dateStr} ${authors}
-                  </h5>
-                  <h3 class="story-title">${title}</h3>
-                  <p class="story-excerpt">${excerpt}</p>
+              <div class="story-card">
+                ${itemTitle ? `<h2 class="story-card-title">${itemTitle}</h2>` : ''}
+                
+                ${whatHappened ? `
+                <div class="story-card-section">
+                  <p><strong>What Happened:</strong> ${whatHappened}</p>
+                </div>` : ''}
+                
+                ${whyItMatters ? `
+                <div class="story-card-section">
+                  <p><strong>Why It Matters:</strong> ${whyItMatters}</p>
+                </div>` : ''}
+                
+                <div class="story-card-source" ${hasLink ? `onclick="window.open('${url}', '_blank', 'noopener')"` : ''}>
+                  ${d.image ? `
+                  <img
+                    class="story-card-image"
+                    src="${d.image}"
+                    onload="this.classList.add('loaded')"
+                    onerror="this.style.display='none'"
+                  >` : ''}
+                  <div class="story-card-source-info">
+                    <span class="story-card-source-label">Source: <em>${source}</em></span>
+                    ${articleTitle ? `<span class="story-card-source-title">${articleTitle}</span>` : ''}
+                    <span class="story-card-source-meta">${authors}${authors && dateStr ? ' · ' : ''}${dateStr}</span>
+                  </div>
                 </div>
               </div>
             `;
