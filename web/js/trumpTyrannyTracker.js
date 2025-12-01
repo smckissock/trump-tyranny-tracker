@@ -28,7 +28,10 @@ export class TrumpTyrannyTracker {
         const overlay = document.getElementById('loading-overlay');
         overlay.classList.replace('loading-hidden','loading-visible');
 
-        const dataPath = 'data/';
+        // Get base path for GitHub Pages (works locally too)
+        const pathname = window.location.pathname;
+        const basePath = pathname.split('/').slice(0, -1).join('/') || '';
+        const dataPath = basePath ? `${basePath}/data/` : 'data/';
 
         console.log(dataPath + 'world_stories.csv.gz')
         const downloadedStories = await loadCompressedCsv(dataPath + 'story.csv.gz');
