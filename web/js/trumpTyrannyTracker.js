@@ -336,7 +336,8 @@ export class TrumpTyrannyTracker {
         }
 
         const filterBoxes = filterTypes.map(filterType => `
-            <div class='filter-box'>
+            <div class='filter-box' data-filter-name='${filterType.name}'>
+                <button class='filter-box-close'>✕</button>
                 <div class='filter-box-title'>${filterType.name}</div>
                 <div class='filter-box-values'>${filterType.filters.join(', ')}</div>
             </div>
@@ -348,7 +349,6 @@ export class TrumpTyrannyTracker {
         const stories = dc.facts.allFiltered().length;
         d3.select('#filters')
             .html(`
-                <a href='https://trumptyrannytracker.substack.com/' target='_blank' class='nav-link'>From Trump Tyranny Tracker</a>
                 ${clearButton}
                 <span class='case-count'> ${addCommas(stories)} stories </b></span> &nbsp;
                 <span class='case-filters'>${filters.join(', ')}</span>
@@ -366,6 +366,25 @@ export class TrumpTyrannyTracker {
                 const state = dc.states?.find(d => d.checked);
                 if (state) state.checked = false;
 
+                dc.redrawAll();
+                window.ttt.refresh();
+            });
+
+            // Individual filter box close buttons
+            d3.selectAll('.filter-box-close').on('click', function(event) {
+                event.stopPropagation();
+                const filterName = d3.select(this.parentNode).attr('data-filter-name');
+                
+                // Find and clear the appropriate filter
+                const rowChart = dc.rowCharts.find(rc => rc.title === filterName);
+                if (rowChart) {
+                    rowChart.chart.filterAll();
+                } else if (filterName === 'Section') {
+                    window.ttt.selectSection(0);
+                } else if (filterName === 'Month' && dc.monthChart) {
+                    dc.monthChart.filterAll();
+                }
+                
                 dc.redrawAll();
                 window.ttt.refresh();
             });

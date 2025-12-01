@@ -5,7 +5,8 @@
     --section-height: 120px;  
 
     --left-width: 220px;
-    --center-width: 290px; 
+    --center-width: 290px;
+    --right-width: 100px;
 }
 
 body {
@@ -24,16 +25,25 @@ a:active {
 .container {
     display: grid;
     grid-template-areas:
-        "logo           logo           filters"
-        "chart-section  chart-section  search"
-        "chart-sourceName chart-authors chart-list";
-    grid-template-columns: var(--left-width) var(--center-width) 1fr;
+        "logo               logo           filters        right-col"
+        "chart-section      chart-section   search         right-col"
+        "chart-sourceName   chart-authors   chart-list    right-col";
+    grid-template-columns: var(--left-width) var(--center-width) 1fr var(--right-width);
     grid-template-rows: var(--logo-height) var(--section-height) 1fr;
     gap: 10px 20px;
     margin: 3px;
     height: 100vh;
     width: calc(100vw - 1.1rem);
     overflow: hidden;
+}
+
+#right-col {
+    grid-area: right-col;
+}
+
+#ttt-link {
+    font-size: 14px;
+    font-weight: 600
 }
 
 #search-container {
