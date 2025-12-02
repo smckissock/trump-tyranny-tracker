@@ -1,8 +1,8 @@
 :root {
     font-size: calc(0.5em + 1vw);
 
-    --logo-height: 80px;  
-    --section-height: 80x;  
+    --logo-height: 90px;  
+    --section-height: 60px;  
 
     --left-width: 220px;
     --center-width: 290px;
@@ -30,10 +30,10 @@ a:active {
     display: grid;
     grid-template-areas:
         "logo            chart-section      chart-section    chart-section"
-        "search          search             filters          filters"
+        "search          search             filters       filters"
         "chart-list      chart-list         charts-right     charts-right";
     grid-template-columns: var(--list-left-width) 1fr var(--source-width) var(--authors-width);
-    grid-template-rows: var(--logo-height) var(--section-height) 1fr;
+    grid-template-rows: var(--logo-height) minmax(var(--section-height), auto) 1fr;
     gap: 10px 10px;
     margin: 3px;
     height: 100vh;
@@ -52,6 +52,9 @@ a:active {
 
 #search-container {
     grid-area: search;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 #logo {
@@ -68,7 +71,8 @@ a:active {
 }
 
 #chart-month {
-    grid-area: chart-month;
+    grid-area: chart-date;
+    height: 100px;
 }
 
 #chart-section {

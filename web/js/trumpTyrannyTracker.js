@@ -20,9 +20,6 @@ export class TrumpTyrannyTracker {
         }
     }
 
-    // configure() {
-    //     dc.leftWidth = 170;
-    // }
    
     async getData() {      
         const overlay = document.getElementById('loading-overlay');
@@ -39,11 +36,22 @@ export class TrumpTyrannyTracker {
         // Filter out glitchy rows with empty title
         const stories = downloadedStories.filter(story => story.title !== '');
 
+        // Build a map from csv_name to display name
+        const sectionNameMap = {};
+        TrumpTyrannyTracker.sections.forEach(s => {
+            sectionNameMap[s.csv_name] = s.name;
+        });
+
         stories.forEach(story => {
             story.count = 1;
             story.date = new Date(story.publishDate);
             if (story.title == '') 
                 story.title = 'Link to story';
+            
+            // Map section csv_name to display name
+            if (story.itemSectionType && sectionNameMap[story.itemSectionType]) {
+                story.itemSectionType = sectionNameMap[story.itemSectionType];
+            }
             
             const languageMap = {
                 'en': 'English',
@@ -72,7 +80,6 @@ export class TrumpTyrannyTracker {
         this.facts = crossfilter(stories);
         dc.facts = this.facts;
 
-        // Load entities for search
         await this.loadEntities(dataPath);
 
         this.setupCharts();
@@ -172,14 +179,8 @@ export class TrumpTyrannyTracker {
         if (!storyIds) {
             console.warn(`Entity not found: ${entityName}`);
             return;
-        }
-        
-        console.log(`Filtering by entity: ${entityName} (${storyIds.size} stories)`);
-        
-        // Store selected entity name
+        }        
         this.selectedEntity = entityName;
-        
-        // Filter to only stories with matching IDs
         this.idDimension.filter(id => storyIds.has(id));
         
         dc.redrawAll();
@@ -203,65 +204,79 @@ export class TrumpTyrannyTracker {
             new RowChart(this.facts, 'sourceName',  chartWidth, 200, this.refresh, 'Publication', null, true),
             new RowChart(this.facts, 'authors',     chartWidth, 200, this.refresh, 'Author', null, true)
         ];
-        this.setupMonthChart();
+        // this.setupMonthChart();
 
         this.sectionDimension = this.facts.dimension(d => d.itemSectionType || '');
         dc.sectionDimension = this.sectionDimension;
+        
+        // Separate dimension for counting (never filtered, so we can count all sections)
+        this.sectionCountDimension = this.facts.dimension(d => d.itemSectionType || '');
+        this.sectionCountGroup = this.sectionCountDimension.group().reduceCount();
         
         this.setupSectionPanels();
         this.listStories();
     }
 
     setupMonthChart() {
-        return
-
         this.monthDimension = this.facts.dimension(d => d3.timeMonth(d.date));
         this.monthGroup = this.monthDimension.group().reduceCount();
 
-        const monthEl = document.getElementById('chart-month');
-        const height = monthEl?.clientHeight || 120;
-
-        const leftWidth = 550;
-        const width = window.innerWidth - leftWidth; 
+        const chartEl = document.getElementById('chart-month');
+        const height = 100;
+        const getWidth = () => chartEl?.clientWidth || chartEl?.parentElement?.clientWidth || 300;
 
         const minD = this.monthDimension.bottom(1)[0]?.date;
-        const minMonth = d3.timeMonth.floor(minD);
-        const maxMonth = d3.timeMonth.offset(d3.timeMonth.floor(new Date()), 0);
+        const width = getWidth();
+        
+        // Skip if no valid dates
+        if (!minD || isNaN(minD.getTime())) {
+            console.warn('No valid dates for month chart');
+            return;
+        }
+        
+        // Ensure minimum width
+        const chartWidth = Math.max(width, 200);
+        
+        // Start from January 2025
+        const minMonth = new Date(2025, 0, 1); // January 2025
+        const maxMonth = d3.timeMonth.offset(d3.timeMonth.floor(new Date()), 1);
+        
+        // Generate all months in range for consistent bar spacing
+        const allMonths = d3.timeMonths(minMonth, maxMonth);
         
         const maxValue = this.monthGroup.top(1)[0]?.value || 100;
 
-        // Generate array of all months in range
-        const allMonths = d3.timeMonths(minMonth, d3.timeMonth.offset(maxMonth, 1));
-
         this.monthChart = new dc.BarChart('#chart-month');
         this.monthChart
-            .width(width)
+            .width(chartWidth)
             .height(height)
             .dimension(this.monthDimension)
             .group(this.monthGroup)
-            .x(d3.scaleBand().domain(allMonths)) 
-            .xUnits(dc.units.ordinal) 
-            .y(d3.scalePow().exponent(0.5).domain([0, maxValue])) 
-            .centerBar(false) 
-            .colors(['#c6dbef'])
-            .barPadding(0.1) 
+            .x(d3.scaleBand().domain(allMonths))
+            .xUnits(dc.units.ordinal)
             .elasticY(true)
             .brushOn(true)
-            .margins({ top: 10, right: 10, bottom: 20, left: 40 })
-            .on('filtered', () => this.refresh()).on('renderlet', function(chart) {
-                chart.selectAll('.bar-label').remove();
-            });
+            .gap(2)
+            .margins({ top: 5, right: 10, bottom: 20, left: 30 })
+            .on('filtered', () => this.refresh());
         this.monthChart.xAxis().tickFormat(d3.timeFormat('%b'));
-        this.monthChart.yAxis().ticks(3);
+        this.monthChart.yAxis().ticks(2);
 
         dc.monthDimension = this.monthDimension;
         dc.monthChart = this.monthChart;
+        
+        // Render the chart immediately
+        this.monthChart.render();
+
+        // Resize after initial render to get correct width
+        requestAnimationFrame(() => {
+            this.monthChart.width(getWidth()).rescale().redraw();
+        });
 
         // Change width when window resizes
         window.addEventListener('resize', () => {
-            const newWidth = window.innerWidth - leftWidth;
             this.monthChart
-                .width(newWidth)
+                .width(getWidth())
                 .rescale() 
                 .redraw(); 
         });
@@ -276,6 +291,9 @@ export class TrumpTyrannyTracker {
                 .attr('class', 'section-panel')
                 .attr('data-section', section.name)
                 .on('click', function() {
+                    // Don't allow clicking disabled panels
+                    if (d3.select(this).classed('disabled')) return;
+                    
                     const clickedSection = d3.select(this).attr('data-section');
                     
                     // Radio button behavior - always select clicked, can't deselect
@@ -290,10 +308,40 @@ export class TrumpTyrannyTracker {
             panel.append('div')
                 .attr('class', 'section-name')
                 .text(section.name);
+            
+            panel.append('div')
+                .attr('class', 'section-count')
+                .text('0 cases');
         });
         
-        // Select first section by default
         this.selectSection(0);
+    }
+    
+    updateSectionCounts() {
+        // Temporarily clear the section filter to get counts for ALL sections
+        // while still respecting other filters (publication, author, entity search)
+        const currentFilter = this.sectionDimension.currentFilter();
+        this.sectionDimension.filterAll();
+        
+        // Get counts per section from the count group
+        const counts = {};
+        this.sectionCountGroup.all().forEach(d => {
+            counts[d.key] = d.value;
+        });
+        
+        // Restore the section filter
+        if (currentFilter) {
+            this.sectionDimension.filter(currentFilter);
+        }
+        
+        // Update each panel's count and disabled state
+        d3.selectAll('.section-panel').each(function() {
+            const sectionName = d3.select(this).attr('data-section');
+            const count = counts[sectionName] || 0;
+            d3.select(this).select('.section-count')
+                .text(`${addCommas(count)} cases`);
+            d3.select(this).classed('disabled', count === 0);
+        });
     }
     
     selectSection(index) {
@@ -318,7 +366,6 @@ export class TrumpTyrannyTracker {
             }
         });
         
-        // Section filter is always active (radio button behavior), so don't show a filter box for it
 
         // Add month (range) filter if active
         if (dc.monthDimension) {
@@ -345,7 +392,7 @@ export class TrumpTyrannyTracker {
             
         const stories = dc.facts.allFiltered().length;
         d3.select('#case-count').text(`${addCommas(stories)} cases`);
-        d3.select('#selected-entity').text(window.ttt.selectedEntity || '');
+        d3.select('#selected-entity').text(window.ttt.selectedEntity ? `"${window.ttt.selectedEntity}"` : '');
         d3.select('#filters')
             .html(`
                 <span class='case-filters'>${filters.join(', ')}</span>
@@ -353,10 +400,10 @@ export class TrumpTyrannyTracker {
             `);
 
         if (hasActiveFilters) {
-            // Individual filter box close buttons
-            d3.selectAll('.filter-box-close').on('click', function(event) {
+            // Click anywhere on filter box to remove it
+            d3.selectAll('.filter-box').on('click', function(event) {
                 event.stopPropagation();
-                const filterName = d3.select(this.parentNode).attr('data-filter-name');
+                const filterName = d3.select(this).attr('data-filter-name');
                 
                 // Find and clear the appropriate filter
                 const rowChart = dc.rowCharts.find(rc => rc.title === filterName);
@@ -382,6 +429,7 @@ export class TrumpTyrannyTracker {
         scrollToTop('#chart-publication');
         scrollToTop('#chart-list');
         window.ttt.listStories();
+        window.ttt.updateSectionCounts();
     }
 
     listStories() {
@@ -399,7 +447,7 @@ export class TrumpTyrannyTracker {
             const dateStr = d.publishDate ? formatDate(new Date(d.publishDate)) : '';
             
             // Skip stories with blocked content
-            if (articleTitle.includes('Access to this page has been denied')) return '';
+            //if (articleTitle.includes('Access to this page has been denied')) return '';
             
             return `
               <div class="story-card">
@@ -456,47 +504,22 @@ export class TrumpTyrannyTracker {
 
     static sections = [
         {
-            "name": "⚖️ In Weaponization of Institutions News",
+            "csv_name": "⚖️ In Weaponization of Institutions News",
+            "name": "⚖️ Weaponization of Institutions",
         },
         {
-            "name": "🛡️ In Power Consolidation News",
+            "csv_name": "🛡️ In Power Consolidation News",
+            "name": "🛡️ Power Consolidation",
         },
         {
-            "name": "👊🏼 In Resistance News",
+            "csv_name": "👊🏼 In Resistance News",
+            "name": "👊🏼 Resistance",
         },
         {
-            "name": "🔥 In Corruption News",
+            "csv_name": "🔥 In Corruption News",
+            "name": "🔥 Corruption",
         }
-    ];
-    
-    static bureaus = [
-        {
-            "name": "Africa",
-            "abbreviation": "AFR",
-            "description": "Manages USAID programs across sub-Saharan Africa"
-        },
-        {
-            "name": "Asia",
-            "abbreviation": "ASIA",
-            "description": "Oversees development and humanitarian programs in Asia"
-        },
-        {
-            "name": "Europe & Eurasia",
-            "abbreviation": "E&E",
-            "description": "Supports democratic and economic transitions in Europe and Eurasia"
-        },
-        {
-            // "name": "Latin America and the Caribbean",
-            "name": "Latin Am & Carib",
-            "abbreviation": "LAC",
-            "description": "Promotes economic growth and democracy in Latin America and the Caribbean"
-        },
-        {
-            "name": "Middle East",
-            "abbreviation": "ME",
-            "description": "Advances stability and prosperity in the Middle East"
-        }
-    ]
+    ];    
 }
 
 const ttt = new TrumpTyrannyTracker();
