@@ -149,6 +149,12 @@ export class TrumpTyrannyTracker {
 
         // Update suggestions on input
         searchInput.addEventListener('input', () => {
+            // Clear existing filter when user starts typing
+            if (this.selectedEntity) {
+                this.clearEntityFilter();
+                clearBtn.style.display = 'none';
+            }
+            
             const query = searchInput.value.trim();
             if (query.length < 2) {
                 this.awesomplete.list = [];
